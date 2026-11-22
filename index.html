@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Winter Watch</title>
+<style>
+  body { font-family: sans-serif; max-width: 700px; margin: 2rem auto; padding: 0 1rem; }
+  fieldset { margin-bottom: 1rem; }
+  label { display: block; margin-top: .5rem; }
+  input, select, textarea { width: 100%; padding: .4rem; box-sizing: border-box; }
+  button { margin-top: .6rem; padding: .4rem 1rem; }
+  #answer { white-space: pre-wrap; background: #f3f3f3; padding: 1rem; margin-top: 1rem; }
+</style>
+</head>
+<body>
+<h1>Winter Watch</h1>
+
+<!-- 1. SETTINGS BOX: the key lives only in this browser (localStorage), never in the code -->
+<fieldset>
+  <legend>Settings</legend>
+  <label>Provider
+    <select id="provider">
+      <option value="groq">Groq</option>
+      <option value="openai">OpenAI</option>
+      <option value="anthropic">Anthropic</option>
+      <option value="gemini">Google Gemini</option>
+    </select>
+  </label>
+  <label>Model <input id="model" placeholder="e.g. llama-3.1-8b-instant"></label>
+  <label>API key <input id="key" type="password" placeholder="paste your key here"></label>
+  <button onclick="saveSettings()">Save</button>
+  <button onclick="forgetKey()">Forget key</button>
+  <span id="status"></span>
+</fieldset>
+
+<!-- 2. QUESTION BOX -->
+<fieldset>
+  <legend>Ask</legend>
+  <textarea id="question" rows="3">Say hello in one sentence.</textarea>
+  <button onclick="ask()">Ask</button>
+</fieldset>
+
+<div id="answer"></div>
+
+<script>
+// Default model per provider (you can type a different one)
+const DEFAULT_MODELS = {
+  groq: "llama-3.1-8b-instant",
+  openai: "gpt-4o-mini",
+  anthropic: "claude-haiku-4-5",
+  gemini: "gemini-2.0-flash"
+};
+
+// ---- Settings: load, save, forget ----
+function loadSettings() {
+  document.getElementById("provider").value = localStorage.getItem("ww_provider") || "groq";
+  document.getElementById("model").value = localStorage.getItem("ww_model") || "";
+  document.getElementById("key").value = localStorage.getItem("ww_key") || "";
+}
+function saveSettings() {
+  localStorage.setItem("ww_provider", document.getElementById("provider").value);
+  localStorage.setItem("ww_model", document.getElementById("model").value);
+  localStorage.setItem("ww_key", document.getElementById("key").value);
+  document.getElementById("status").textContent = " Saved in this browser only.";
+}
+function forgetKey() {
+  localStorage.removeItem("ww_key");
+  document.getElementById("key").value = "";
+  document.getElementById("status").textContent = " Key forgotten.";
+}
+
+// ---- The "brain": send a prompt to the chosen provider, return text ----
+async function callBrain(prompt) {
+  const provider = localStorage.getItem("ww_provider") || "groq";
+  const key = localStorage.getItem("ww_key");
+  const model = localStorage.getItem("ww_model") || DEFAULT_MODELS[provider];
+  if (!key) throw new Error("No key saved. Paste your key and press Save.");
+
+  if (provider === "groq" || provider === "openai") {
+    // Groq uses the same format as OpenAI, just a different address
+    const url = provider === "groq"
+      ? "https://api.groq.com/openai/v1/chat/completions"
+      : "https://api.openai.com/v1/chat/completions";
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+      body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }] })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(JSON.stringify(data));
+    return data.choices[0].message.content;
+  }
+
+  if (provider === "anthropic") {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true" // needed for browser calls
+      },
+      body: JSON.stringify({ model, max_tokens: 800, messages: [{ role: "user", content: prompt }] })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(JSON.stringify(data));
+    return data.content[0].text;
+  }
+
+  if (provider === "gemini") {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(JSON.stringify(data));
+    return data.candidates[0].content.parts[0].text;
+  }
+}
+
+// ---- Ask button ----
+async function ask() {
+  const out = document.getElementById("answer");
+  out.textContent = "Thinking...";
+  try {
+    out.textContent = await callBrain(document.getElementById("question").value);
+  } catch (e) {
+    out.textContent = "Error: " + e.message;
+  }
+}
+
+loadSettings();
+</script>
+</body>
+</html>
