@@ -26,8 +26,8 @@
       <option value="gemini">Google Gemini</option>
     </select>
   </label>
-  <label>Model <input id="model" placeholder="e.g. llama-3.1-8b-instant"></label>
-  <label>API key <input id="key" type="password" placeholder="paste your key here"></label>
+  <label>Model <input id="model" autocomplete="off" placeholder="e.g. llama-3.1-8b-instant"></label>
+  <label>API key <input id="key" type="password" autocomplete="new-password" placeholder="paste your key here"></label>
   <button onclick="saveSettings()">Save</button>
   <button onclick="forgetKey()">Forget key</button>
   <span id="status"></span>
